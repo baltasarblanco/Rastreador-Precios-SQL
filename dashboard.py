@@ -3,7 +3,8 @@ import sqlite3
 import pandas as pd
 
 # 1 . CONFIGURACIÓN DE PÁGINA ( Para que se vea ancha )
-st.set_page_config(page_title="Monitor de Precios", layout= "wide")
+st.set_page_config(page_title="Monitor de Precios", layout= "wide", page_icon="🦍")
+
 
 st.title("🦍 CENTRO DE MANDO - PRECIOS 2026")
 st.markdown("---")
@@ -15,54 +16,71 @@ df = pd.read_sql(query, conn)
 conn.close()
 
 # ---- BARRA LATERAL 🎯 SIDE BAR ----
-st.sidebar.header ("🎛️ Filtros")
+st.sidebar.header ("🎛️ Filtros Avanzados")  
+ver_todos = st.sidebar.checkbox("Mostrar todos los datos", value=True)
 
-# Filtro 1 : Checkbox para ver todo o solo lo nuevo
-ver_solo_hoy = st.sidebar.checkbox("Ver solo datos de HOY")
+# . KPI (MÉTRICAS CLAVE) --- NUEVO !!!!
+# Mostramos estadisticas rápidas arriba de todo
+st.subheader("📊 Estadísticas Generales")
+kpi1, kpi2, kpi3 = st.columns(3)
 
-# Filtro 2 : Slider de Precio ( Entre 0  y el máximo que encuentre)
-precio_maximo_posible = int(df["precio"].max()) + 10 # Un poco mas del maximo real
-precio_filtro = st.sidebar.slider(
-    "Precio Máximo ($)",
-    min_value=0,
-    max_value=precio_maximo_posible,
-    value=precio_maximo_posible # Valor por defecto (todo)
-)
+avg_price = df["precio"].mean()
+max_price = df["precio"].max()
+min_price = df["precio"].min()
 
-# Filtro 3: BUSCADOR DE TEXTO
-texto_buscar = st.sidebar.text_input ("🔍 Buscar por nombre:")
+kpi1.metric("Precio Promedio", f"${round(avg_price, 2)}", delta="Global")
+kpi2.metric("Producto Más Caro", f"${max_price}", delta="-Riesgo", delta_color='inverse')
+kpi3.metric("Producto Más Barato", f"${min_price}", delta="+Oportunidad")
+
+st.markdown("----")
 
 
-# -----🧠 LOGICA DE FILTRADO (PANDAS) -----
-# AQUI es donde ocurre la magia. Filtramos el DataFrame Original
+# 4 . FILTROS Y LÓGICA
+max_p = int(df["precio"].max()) if not df.empty else 100
+precio_filtro = st.sidebar.slider ("Tope de Precio ($)", 0, max_p, max_p)
+texto_buscar = st.sidebar.text_input("🔍 Buscar producto")
 
-df_filtrado = df.copy() # Trabajamos  sobre una copía para no romper el original
+df_filtrado = df.copy()
 
-# Aplicar filtro de precio
 df_filtrado = df_filtrado[df_filtrado["precio"] <= precio_filtro]
 
-# Aplicar filtro de texto (si escribió algo0)
+# Filtramos por texto ( si existe)
 if texto_buscar:
-    # str.cotains busca el texto, case=False ignora mayusculas
     df_filtrado = df_filtrado[df_filtrado["nombre"].str.contains(texto_buscar, case=False)]
 
 
-# ----- 📊 MOSTRAR EL RESULTADO -----
-
-# Dividimos la pantalla en 2 columnas (Gráfico y Tabla)
-
-col_grafico, col_tabla = st.columns([2, 1]) # La columna 1 es el doble de ancha
+# 5 . VISUALIZACIÓN PRO
+col_grafico, col_tabla = st.columns([2, 1])
 
 with col_grafico:
-    st.subheader("💰 Distribución de Precios")
-    # Mostramos gráfico solo de lo filtrado
-    st.bar_chart(df_filtrado.set_index("nombre")["precio"])
+    st.subheader ("💰 Tendencias de Mercado")
+    if not df_filtrado.empty:
+        st.bar_chart(df_filtrado.set_index("nombre")["precio"], color="#00ff00") # COLOR VERDE HACKER !!
+    else:
+        st.warning("No hay datos para mostrar.")
+
 
 with col_tabla:
-    st.subheader ("📋 Datos Detallados")
-    st.write (f"Mostrando {len(df_filtrado)} productos")
-    st.dataframe(df_filtrado, height=400)
+    st.subheader("📋 Datos (Descargables)")
 
-# Métricas flotantes
-st.markdown("---")
-st.metric("Precio Promedio (Selección)", f"${round(df_filtrado['precio'].mean(), 2)}")
+    # 6. BOTÓN DE DESCARGA (¡SUPER IMPORTANTE!)
+    # Convertimos el DF a CSV (texto separado por comas)
+    csv = df_filtrado.to_csv(index=False).encode('utf-8')
+    
+    st.download_button(
+        label="📥 Descargar a Excel (CSV)",
+        data=csv,
+        file_name="reporte_precios_2026.csv",
+        mime="text/csv",
+
+    )
+
+    # 7. TABLA CON COLORES (HEATMAP)
+    # Resalta precios altos en un tono y bajos en otro
+
+    st.dataframe(
+        df_filtrado.style.highlight_max(axis=0, color='#ffcccb') # ROJO SUAVE PARA MAX
+                    .highlight_min(axis=0, color='#90ee90'), # VERDE SUAVE PARA EL MIN
+        height=400
+
+    )
